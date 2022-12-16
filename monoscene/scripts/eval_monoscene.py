@@ -1,10 +1,10 @@
+import torch
 from pytorch_lightning import Trainer
 from monoscene.models.monoscene import MonoScene
 from monoscene.data.NYU.nyu_dm import NYUDataModule
 from monoscene.data.semantic_kitti.kitti_dm import KittiDataModule
 import hydra
 from omegaconf import DictConfig
-import torch
 import os
 from hydra.utils import get_original_cwd
 

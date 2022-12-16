@@ -1,0 +1,52 @@
+# pip换源
+pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/
+pip install pip -U
+
+# 环境变量
+export KITTI_PREPROCESS=/workspace/mnt/storage/shihao/SemanticKITTI-SSC/SemanticKITTI_PreProc/
+export KITTI_ROOT=/workspace/mnt/storage/shihao/SemanticKITTI-SSC/src/
+export NYU_PREPROCESS=/workspace/mnt/storage/shihao/SemanticKITTI-SSC/NYUv2_PreProc/
+export NYU_ROOT=/workspace/mnt/storage/shihao/SemanticKITTI-SSC/NYUv2/NYU_dataset/depthbin/
+export KITTI_360_ROOT=/workspace/mnt/storage/shihao/SemanticKITTI-SSC/KITTI360_Test/
+export MONOSCENE_OUTPUT=/workspace/mnt/storage/shihao/shihao-cephs/MonoScene/outputs/infer/
+
+# 批量清除显卡进程
+# 安装fuser
+apt-get install psmisc
+fuser -v /dev/nvidia* |awk '{for(i=1;i<=NF;i++)print "kill -9 " $i;}' | sh
+
+# 查看CPU的核心数量
+cat /proc/cpuinfo| grep "cpu cores"| uniq
+grep 'core id' /proc/cpuinfo | sort -u | wc -l
+
+# 测试KITTI val
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python monoscene/scripts/eval_monoscene.py dataset=kitti kitti_root=$KITTI_ROOT \
+kitti_preprocess_root=$KITTI_PREPROCESS n_gpus=1 batch_size=1
+备注：kitti val包含815帧点云, 就是08序列。worker4 单卡3090 eval 一次约12m40s
+
+# 测试NYU test
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python monoscene/scripts/eval_monoscene.py dataset=NYU NYU_root=$NYU_ROOT \
+NYU_preprocess_root=$NYU_PREPROCESS n_gpus=1 batch_size=1
+备注：nyu test包含327帧点云, 看了一下原始划分是795/654少了一半，值得研究一下原因。worker4 单卡3090 eval 一次约4m19s
+
+# 推理KITTI val
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python monoscene/scripts/generate_output.py +output_path=$MONOSCENE_OUTPUT \
+dataset=kitti kitti_root=$KITTI_ROOT kitti_preprocess_root=$KITTI_PREPROCESS n_gpus=1 batch_size=1
+备注：这里infer是815帧，和eval一样 单卡3090 infer 一次约8m34s
+
+# 推理NYU test
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python monoscene/scripts/generate_output.py +output_path=$MONOSCENE_OUTPUT \
+dataset=NYU NYU_root=$NYU_ROOT NYU_preprocess_root=$NYU_PREPROCESS n_gpus=1 batch_size=1
+备注：为啥这里跑infer的数量是654？刚好是eval的两倍 和原始划分一致 单卡3090 infer 一次约4m08s
+
+# 推理KITTI360 test
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1  python monoscene/scripts/generate_output.py \
++output_path=$MONOSCENE_OUTPUT dataset=kitti_360 +kitti_360_root=$KITTI_360_ROOT \
++kitti_360_sequence=2013_05_28_drive_0008_sync n_gpus=1 batch_size=1
+备注：使用test 08序列，566帧图像 单卡3090 infer 一次约5m02s
+
+# 可视化NYU
+python monoscene/scripts/visualization/NYU_vis_pred.py +file=outputs/infer/NYU/NYU0001_0000.pkl
+
+# 可视化SemanticKITTI
+python monoscene/scripts/visualization/kitti_vis_pred.py +file=E:\SSC_Results\MonoScene\kitti\08\000025.pkl +dataset=kitt
